@@ -81,12 +81,12 @@ export function nativeCallbacks(ctx, agent, journal = ctx.get('adminBridgeJourna
   const sandbox = ctx.get('sandboxPolicy');
   const approval = ctx.get('approval');
   if (!presets || !sandbox || !approval || !journal)
-    fail('unavailable', 'Native permission modes or restoration storage are unavailable.');
+    fail('unavailable', '原生权限模式或恢复存储不可用。');
   const capture = () => ({ preset: presets.current(session),
     sandbox: sandbox.resolve({ session }).mode,
     approval: approval.overrideOf(session) ?? approval.config.policy ?? 'ask' });
   const restore = previous => {
-    if (!validPrevious(previous)) fail('invalid_session', 'Cannot restore the previous permission mode.');
+    if (!validPrevious(previous)) fail('invalid_session', '无法恢复之前的权限模式。');
     if (capture().sandbox !== previous.sandbox) setSandboxMode(session, previous.sandbox);
     if (capture().approval !== previous.approval) approval.setPolicy(agent, previous.approval);
     // Preserve a named preset only if its definition still matches the captured
@@ -101,7 +101,7 @@ export function nativeCallbacks(ctx, agent, journal = ctx.get('adminBridgeJourna
     commitFull() {
       const full = presets.resolve('danger-full-access');
       if (full.sandbox !== 'danger-full-access' || full.approval !== 'never')
-        fail('unavailable', 'Sudo access requires the standard Full access preset.');
+        fail('unavailable', 'Sudo 权限需要标准的完全访问预设。');
       // Called only after fresh human password authentication, including when
       // an agent requested the dialog. Requesting alone never grants authority.
       approval.setPolicy(agent, 'never');
@@ -117,17 +117,17 @@ export function nativeCallbacks(ctx, agent, journal = ctx.get('adminBridgeJourna
       (session.header.delegationDepth ?? 0) > 0,
     nativeNames: presets.names,
     audit(type, data) {
-      if (type !== MODE_EVENT) fail('invalid_session', 'Invalid restoration journal action.');
+      if (type !== MODE_EVENT) fail('invalid_session', '无效的恢复日志操作。');
       if (data.action === 'enter') {
         journal.write(session.id, { generation: data.generation, previous: data.previous,
           startSeq: session.seq, commitSeq: null, sessionCreatedAt: session.header.createdAt });
       } else if (data.action === 'commit') {
         const entry = journal.read(session.id);
         if (entry?.generation !== data.generation)
-          fail('invalid_session', 'Restoration journal changed during mode entry.');
+          fail('invalid_session', '进入模式期间恢复日志发生变化。');
         journal.write(session.id, { ...entry, commitSeq: session.seq });
       } else if (data.action === 'exit') journal.remove(session.id, data.generation);
-      else fail('invalid_session', 'Invalid restoration journal action.');
+      else fail('invalid_session', '无效的恢复日志操作。');
     },
   };
   recoverMode(session, callbacks, journal);
@@ -143,22 +143,22 @@ export function mountSession(ctx, agent, mode, journal = ctx.get('adminBridgeJou
   // the `agents` registry instead of `ctx.agent`. `agent/created` is announced only
   // after the registry entry exists, so this is the same exact-identity check.
   if (!agent || ctx.get('agents')?.get(session_id(agent)) !== agent)
-    fail('invalid_session', 'An exact live agent scope is required.');
+    fail('invalid_session', '需要精确匹配的活动 agent 作用域。');
   const session = agent.session;
   const sessionId = session.id;
   const tools = ctx.get('tools');
   const commands = ctx.get('commands');
   const original = commands?.find(agent, 'permission');
-  if (!tools || !original) fail('unavailable', 'The native permission command is unavailable.');
+  if (!tools || !original) fail('unavailable', '原生权限命令不可用。');
   const callbacks = nativeCallbacks(ctx, agent, journal);
   const register = (name, description, parameters, required, run, optional = []) => tools.register(defineTool({
     name, description, parameters, output,
     async execute(args, exec) {
       try {
         if (exec.agent !== agent || exec.agent.session !== session)
-          fail('invalid_session', 'This tool belongs to a different live session.');
+          fail('invalid_session', '此工具属于另一个活跃会话。');
         exactKeys(args, required, optional);
-        if (exec.signal.aborted) fail('cancelled', 'Administrator operation was cancelled.');
+        if (exec.signal.aborted) fail('cancelled', '管理员操作已取消。');
         return { ok: true, value: await run(args, exec) };
       } catch (error) { return { ok: false, error: publicError(error) }; }
     },
@@ -171,21 +171,23 @@ export function mountSession(ctx, agent, mode, journal = ctx.get('adminBridgeJou
     // Supported agent-local shadow: do not replace the global registry or the
     // permission service. Ordinary selections retain their original handler.
     yield commands.register({ ...original, recordInput: true,
-      description: 'Switch permission mode: Read Only, Workspace Write, Full access, or password-gated Sudo access',
+      description: '切换权限模式：只读、工作区写入、完全访问，或需要密码认证的 Sudo 权限（可在后面附加秒数，如 sudo-access 600）',
       handler: async invocation => {
         if (invocation.agent !== agent || invocation.agent.session !== session)
-          return { kind: 'error', text: 'This permission selector belongs to another session.' };
-        const selected = invocation.rawInput.trim();
+          return { kind: 'error', text: '此权限选择器属于另一个会话。' };
+        const [selected, ttlArg] = invocation.rawInput.trim().split(/\s+/);
         if (selected === 'sudo-access') {
           try {
-            if (invocation.signal.aborted) fail('cancelled', 'Mode selection was cancelled.');
-            mode.begin(sessionId, { source: 'permission-command', identity: agent });
-            return { kind: 'success', text: 'Authenticate in the Sudo access password dialog. The previous mode remains active until authentication succeeds.' };
+            if (invocation.signal.aborted) fail('cancelled', '模式选择已取消。');
+            const ttlSeconds = ttlArg === undefined || ttlArg === '' ? undefined : Number(ttlArg);
+            mode.begin(sessionId, { source: 'permission-command', identity: agent,
+              ...(ttlSeconds === undefined ? {} : { ttlSeconds }) });
+            return { kind: 'success', text: '请在 Sudo 权限密码对话框中完成认证。认证成功前，之前的模式保持有效。' };
           } catch (error) { return { kind: 'error', text: publicError(error).message }; }
         }
         if (selected === '') {
           const status = mode.describe(sessionId);
-          return { kind: 'success', text: `current mode ${status.modeActive ? 'sudo-access' : callbacks.capture().preset} (available: ${ctx.get('permissionPresets').names.join(', ')}, sudo-access)` };
+          return { kind: 'success', text: `当前模式 ${status.modeActive ? 'sudo-access' : callbacks.capture().preset}（可用：${ctx.get('permissionPresets').names.join(', ')}、sudo-access）` };
         }
         if (ctx.get('permissionPresets').names.includes(selected)) {
           try { mode.lock(sessionId); }
@@ -195,7 +197,7 @@ export function mountSession(ctx, agent, mode, journal = ctx.get('adminBridgeJou
       },
     });
     yield register('admin_request',
-      'Actively request Sudo access when the task needs root privileges. Opens this session’s GUI password dialog; does not grant access until the human authenticates. Check admin_status afterward, then use admin_run. Never request or accept passwords in chat or tools; do not repeat a cancelled request without human direction.',
+      '当任务需要 root 权限时，主动请求 Sudo 权限。打开本会话的 GUI 密码对话框；在人类完成认证前不会授予权限。之后请检查 admin_status，再使用 admin_run。绝不要在聊天或工具中请求或接受密码；未经人类指示不要重复已取消的请求。',
       {}, [], () => {
         const current = mode.describe(sessionId);
         if (!current.modeActive && !['pending', 'authenticating'].includes(current.state))
@@ -204,17 +206,17 @@ export function mountSession(ctx, agent, mode, journal = ctx.get('adminBridgeJou
         return status;
       });
     yield register('admin_status',
-      'Read this session’s Sudo access mode and command scope. If root access is needed and inactive, use admin_request to open the GUI authentication dialog. Only human password authentication grants access; never request a password in chat or tools.',
+      '读取本会话的 Sudo 权限模式与命令范围。如果需要 root 权限但尚未激活，请使用 admin_request 打开 GUI 认证对话框。只有人类密码认证才会授予权限；绝不要在聊天或工具中索要密码。',
       {}, [], () => {
         const { requestId: _browserOnly, ...status } = mode.describe(sessionId);
         return status;
       });
     yield register('admin_run',
-      'Run any root shell command under this session’s authenticated Sudo access. When inactive, first call admin_request and wait for human GUI authentication. Supply command (bash syntax; no sudo prefix needed), or a legacy operationId, never both. Output is model-visible; do not print secrets. Leaving Sudo revokes authorization, not completed effects.',
-      { command: { type: 'string', description: 'Root bash command, up to 16 KiB.' },
-        workdir: { type: 'string', description: 'Absolute working directory for command; defaults to /.' },
-        timeoutSeconds: { type: 'integer', description: 'Command timeout, 1–120 seconds; defaults to 120.' },
-        operationId: { type: 'string', description: 'Alternatively, a configured operation ID; no command options allowed.' } },
+      '在本会话已认证的 Sudo 权限下执行任意 root shell 命令。未激活时先调用 admin_request 并等待人类在 GUI 中认证。提供 command（bash 语法，无需 sudo 前缀），或使用旧版 operationId，二者不可同时提供。输出对模型可见；不要打印机密信息。离开 Sudo 会撤销授权，但不会撤销已完成的命令效果。',
+      { command: { type: 'string', description: 'root bash 命令，最大 16 KiB。' },
+        workdir: { type: 'string', description: 'command 的绝对工作目录；默认为 /。' },
+        timeoutSeconds: { type: 'integer', description: '命令超时时间，1–120 秒；默认为 120。' },
+        operationId: { type: 'string', description: '或者，使用已配置的操作 ID；不可再提供 command 相关选项。' } },
       [], (args, exec) => {
         if (Object.hasOwn(args, 'operationId')) {
           exactKeys(args, ['operationId']);
@@ -224,7 +226,7 @@ export function mountSession(ctx, agent, mode, journal = ctx.get('adminBridgeJou
         return mode.runCommand(sessionId, args, exec.signal);
       }, ['command', 'workdir', 'timeoutSeconds', 'operationId']);
     yield register('admin_lock',
-      'Leave Sudo access or cancel pending authentication, revoke root authorization, and restore this session’s previous permission mode. Does not affect other sessions.',
+      '离开 Sudo 权限或取消待处理的认证，撤销 root 授权，并恢复本会话之前的权限模式。不影响其他会话。',
       {}, [], () => mode.lock(sessionId));
   }, 'admin-bridge: password-gated mode, native selector command, and scoped tools');
 }

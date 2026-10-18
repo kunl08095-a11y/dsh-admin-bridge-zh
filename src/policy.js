@@ -9,7 +9,7 @@ export function validateCommand(value) {
       typeof workdir !== 'string' || !workdir.startsWith('/') || !workdir.isWellFormed() ||
       /[\x00-\x1f\x7f]/.test(workdir) || Buffer.byteLength(workdir) > MAX_WORKDIR_BYTES ||
       !integer(timeoutSeconds, 1, 120))
-    fail('invalid_request', 'Command must be nonempty UTF-8 text up to 16 KiB, workdir an absolute path up to 4 KiB, and timeout 1–120 seconds.');
+    fail('invalid_request', 'command 必须是不超过 16 KiB 的非空 UTF-8 文本，workdir 必须是不超过 4 KiB 的绝对路径，timeout 为 1–120 秒。');
   return Object.freeze({ command, workdir, timeoutSeconds });
 }
 export class BridgeError extends Error {
@@ -20,13 +20,13 @@ export const isObject = value => value !== null && typeof value === 'object' && 
 export function exactKeys(value, required, optional = []) {
   if (!isObject(value) || required.some(key => !Object.hasOwn(value, key)) ||
       Object.keys(value).some(key => !required.includes(key) && !optional.includes(key))) {
-    fail('invalid_request', 'Invalid request shape.');
+    fail('invalid_request', '请求结构无效。');
   }
 }
 export function integer(value, min, max) { return Number.isSafeInteger(value) && value >= min && value <= max; }
 export function identifier(value) { return typeof value === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(value); }
 export function validateOperations(value) {
-  if (!Array.isArray(value) || value.length > 16) fail('invalid_config', 'Configure at most 16 operations.');
+  if (!Array.isArray(value) || value.length > 16) fail('invalid_config', '最多配置 16 个操作。');
   const seen = new Set();
   return Object.freeze(value.map(op => {
     exactKeys(op, ['id', 'label', 'executable', 'args', 'timeoutSeconds']);
@@ -37,20 +37,20 @@ export function validateOperations(value) {
         op.executable.split('/').slice(1).some(part => ['', '.', '..'].includes(part)) ||
         !Array.isArray(op.args) || op.args.length > 32 ||
         op.args.some(arg => typeof arg !== 'string' || arg.length > 1024 || !arg.isWellFormed() || /[\x00-\x1f\x7f]/.test(arg)) ||
-        !integer(op.timeoutSeconds, 1, 120)) fail('invalid_config', 'Invalid operation definition.');
+        !integer(op.timeoutSeconds, 1, 120)) fail('invalid_config', '无效的操作定义。');
     seen.add(op.id);
     return Object.freeze({ ...op, args: Object.freeze([...op.args]) });
   }));
 }
 export function selectManifest(operations, operationIds, ttlSeconds, maxTtlSeconds = 300, allowAllCommands = false) {
-  if (typeof allowAllCommands !== 'boolean') fail('invalid_config', 'allowAllCommands must be a boolean.');
+  if (typeof allowAllCommands !== 'boolean') fail('invalid_config', 'allowAllCommands 必须是布尔值。');
   if (!integer(maxTtlSeconds, 30, 900) || !integer(ttlSeconds, 30, maxTtlSeconds))
-    fail('invalid_request', 'Requested lifetime is outside the configured bounds.');
+    fail('invalid_request', '请求的时长超出配置范围。');
   if (!Array.isArray(operationIds) || operationIds.length < (allowAllCommands ? 0 : 1) || operationIds.length > 16 ||
       operationIds.some(id => !identifier(id)) || new Set(operationIds).size !== operationIds.length)
-    fail('invalid_request', 'Choose one or more distinct configured operation IDs.');
+    fail('invalid_request', '请选择一个或多个不同的已配置操作 ID。');
   const selected = operationIds.map(id => operations.find(op => op.id === id));
-  if (selected.some(op => !op)) fail('invalid_request', 'Unknown configured operation.');
+  if (selected.some(op => !op)) fail('invalid_request', '未知的已配置操作。');
   return Object.freeze({ version: 1, ttlSeconds, allowAllCommands, operations: Object.freeze(selected) });
 }
 export function publicError(error) {

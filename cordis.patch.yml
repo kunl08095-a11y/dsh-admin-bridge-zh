@@ -13,7 +13,8 @@
         # Agents may call admin_request({}) to open the GUI dialog; the request
         # itself grants no permission. Never supply a password in chat/tools.
         # Command effects and detached processes can outlive the lease.
-        maxTtlSeconds: 300
+        # Hard cap the GUI duration picker may choose (30–900, bridge policy).
+        maxTtlSeconds: 900
         # Empty allows only same-origin loopback HTTP from a loopback peer.
         # Remote use requires explicitly named HTTPS origins plus DSH host trust.
         allowedOrigins: []

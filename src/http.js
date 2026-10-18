@@ -6,13 +6,13 @@ const loopbackNames = new Set(['localhost', '127.0.0.1', '[::1]']);
 const loopbackPeers = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 export function validateOrigins(origins = []) {
-  if (!Array.isArray(origins) || origins.length > 16) fail('invalid_config', 'Configure at most 16 browser origins.');
+  if (!Array.isArray(origins) || origins.length > 16) fail('invalid_config', '最多配置 16 个浏览器来源。');
   for (const value of origins) {
     let url;
-    try { url = new URL(value); } catch { fail('invalid_config', 'Invalid browser origin.'); }
+    try { url = new URL(value); } catch { fail('invalid_config', '无效的浏览器来源。'); }
     if (url.origin !== value || url.username || url.password ||
         !(url.protocol === 'https:' || (url.protocol === 'http:' && loopbackNames.has(url.hostname))))
-      fail('invalid_config', 'Browser origins must be exact HTTPS or loopback HTTP origins.');
+      fail('invalid_config', '浏览器来源必须是精确的 HTTPS 或环回 HTTP 来源。');
   }
   return Object.freeze([...origins]);
 }
@@ -42,7 +42,7 @@ function body(req) {
       chunks = [];
       error ? reject(error) : resolve(value);
     };
-    const invalid = () => new BridgeError('invalid_request', 'Invalid or oversized request body.');
+    const invalid = () => new BridgeError('invalid_request', '请求体无效或过大。');
     const abort = () => finish(invalid());
     const data = chunk => {
       bytes += chunk.length;
@@ -76,25 +76,25 @@ export function createHandler({ bridge, requestRejection, allowedOrigins = [] })
   return async (req, res) => {
     try {
       const rejection = requestRejection(req);
-      if (rejection !== undefined) { respond(res, rejection, { error: { code: 'unauthorized', message: 'DSH browser authentication is required.' } }); return; }
+      if (rejection !== undefined) { respond(res, rejection, { error: { code: 'unauthorized', message: '需要 DSH 浏览器认证。' } }); return; }
       if (req.method !== 'POST' || req.headers['x-dsh-admin-bridge'] !== '1' || !originAllowed(req, origins)) {
-        respond(res, 403, { error: { code: 'forbidden', message: 'A trusted same-origin browser request is required.' } }); return;
+        respond(res, 403, { error: { code: 'forbidden', message: '需要受信任的同源浏览器请求。' } }); return;
       }
       if (!/^application\/json(?:;\s*charset=utf-8)?$/i.test(req.headers['content-type'] ?? '') ||
           req.headers['content-encoding'] !== undefined ||
           (req.headers['content-length'] !== undefined &&
             (!/^\d+$/.test(req.headers['content-length']) || Number(req.headers['content-length']) > LIMIT)))
-        fail('invalid_request', 'Invalid or oversized request body.');
+        fail('invalid_request', '请求体无效或过大。');
       const endpoint = req.url?.slice(HTTP_PREFIX.length);
       if (!req.url?.startsWith(HTTP_PREFIX) || !['status', 'authenticate', 'lock'].includes(endpoint)) {
-        respond(res, 404, { error: { code: 'not_found', message: 'Unknown administrator endpoint.' } }); return;
+        respond(res, 404, { error: { code: 'not_found', message: '未知的管理员端点。' } }); return;
       }
       let payload = await body(req);
       exactKeys(payload, endpoint === 'authenticate' ? ['sessionId', 'requestId', 'password'] : ['sessionId'],
         endpoint === 'lock' ? ['requestId'] : []);
-      if (!identifier(payload.sessionId)) fail('invalid_request', 'Invalid session identifier.');
+      if (!identifier(payload.sessionId)) fail('invalid_request', '无效的会话标识符。');
       if (endpoint === 'lock' && Object.hasOwn(payload, 'requestId') && !identifier(payload.requestId))
-        fail('invalid_request', 'Invalid authentication request identifier.');
+        fail('invalid_request', '无效的认证请求标识符。');
       if (res.destroyed) {
         if (endpoint === 'authenticate') bridge.cancelRequest(payload.sessionId, payload.requestId);
         return;

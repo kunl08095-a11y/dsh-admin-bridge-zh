@@ -27,11 +27,11 @@ export class SudoWorker {
   }
 
   async authenticate(password) {
-    if (this.child || this.closed) fail('closed', 'Administrator worker is unavailable.');
-    if (!this.canProceed()) fail('policy_denied', 'Administrator authorization is no longer available.');
+    if (this.child || this.closed) fail('closed', '管理员 worker 不可用。');
+    if (!this.canProceed()) fail('policy_denied', '管理员授权已不可用。');
     if (typeof password !== 'string' || (this.requirePassword && password.length === 0) ||
         Buffer.byteLength(password) > 4096 || /[\r\n\0]/.test(password))
-      fail('invalid_request', 'Invalid password input.');
+      fail('invalid_request', '密码输入无效。');
     let secret = Buffer.from(password + '\n', 'utf8');
     password = undefined;
     let stderr = '';
@@ -50,7 +50,7 @@ export class SudoWorker {
         error ? reject(error) : resolve(this);
       };
       this.authTimer = setTimeout(() => {
-        finishAuth(new BridgeError('authentication_failed', 'Authentication failed or timed out.'));
+        finishAuth(new BridgeError('authentication_failed', '认证失败或超时。'));
         this.close();
       }, this.authMs);
       try {
@@ -59,7 +59,7 @@ export class SudoWorker {
           Buffer.from(JSON.stringify(this.manifest)).toString('base64url'),
         ], { shell: false, cwd: '/', env: { ...safeEnvironment }, stdio: ['pipe', 'pipe', 'pipe'] });
       } catch {
-        finishAuth(new BridgeError('authentication_failed', 'Could not start the administrator worker.'));
+        finishAuth(new BridgeError('authentication_failed', '无法启动管理员 worker。'));
         this.close();
         return;
       }
@@ -70,11 +70,11 @@ export class SudoWorker {
       child.stdout.on('end', () => this.close());
       child.stdout.on('close', () => this.close());
       child.on('error', () => {
-        finishAuth(new BridgeError('authentication_failed', 'Could not start the administrator worker.'));
+        finishAuth(new BridgeError('authentication_failed', '无法启动管理员 worker。'));
         this.close();
       });
       child.on('close', () => {
-        finishAuth(new BridgeError('authentication_failed', 'Authentication failed or worker exited.'));
+        finishAuth(new BridgeError('authentication_failed', '认证失败或 worker 已退出。'));
         this.close();
       });
       child.stderr.on('data', chunk => {
@@ -107,7 +107,7 @@ export class SudoWorker {
             // Sudo mode promises fresh password authentication on every entry.
             // NOPASSWD must not make an arbitrary submitted password look valid.
             if (this.requirePassword && !sent) {
-              finishAuth(new BridgeError('password_required', 'Sudo access requires password-based sudo authentication; passwordless sudo is not supported.'));
+              finishAuth(new BridgeError('password_required', 'Sudo 权限需要基于密码的 sudo 认证，不支持免密码 sudo。'));
               this.close(); return;
             }
             this.ready = true;
@@ -125,28 +125,28 @@ export class SudoWorker {
             truncated: frame.truncated, timedOut: frame.timedOut });
         }
       });
-      this.failAuth = () => finishAuth(new BridgeError('authentication_failed', 'Authentication failed or was cancelled.'));
+      this.failAuth = () => finishAuth(new BridgeError('authentication_failed', '认证失败或已取消。'));
     });
   }
 
   run(operationId) {
-    if (!this.ready || this.closed) fail('locked', 'Administrator access is locked.');
-    if (this.pending) fail('busy', 'Another administrator operation is running.');
+    if (!this.ready || this.closed) fail('locked', '管理员访问已锁定。');
+    if (this.pending) fail('busy', '另一个管理员操作正在运行。');
     const op = this.manifest.operations.find(item => item.id === operationId);
-    if (!op) fail('not_authorized', 'This operation is not in the authorized set.');
+    if (!op) fail('not_authorized', '此操作不在授权集合中。');
     return this.#dispatch({ type: 'run', operationId }, op.timeoutSeconds);
   }
 
   runCommand(request) {
-    if (!this.ready || this.closed) fail('locked', 'Administrator access is locked.');
-    if (this.pending) fail('busy', 'Another administrator operation is running.');
-    if (this.manifest.allowAllCommands !== true) fail('not_authorized', 'Arbitrary commands are not authorized by this lease.');
+    if (!this.ready || this.closed) fail('locked', '管理员访问已锁定。');
+    if (this.pending) fail('busy', '另一个管理员操作正在运行。');
+    if (this.manifest.allowAllCommands !== true) fail('not_authorized', '此租约未授权任意命令。');
     const command = validateCommand(request);
     return this.#dispatch({ type: 'runCommand', ...command }, command.timeoutSeconds);
   }
 
   #dispatch(frame, timeoutSeconds) {
-    if (!this.canProceed()) { this.close(); fail('policy_denied', 'Administrator authorization is no longer available.'); }
+    if (!this.canProceed()) { this.close(); fail('policy_denied', '管理员授权已不可用。'); }
     return new Promise((resolve, reject) => {
       const id = randomUUID();
       const timer = setTimeout(() => this.close(), (timeoutSeconds + 3) * 1000);
@@ -164,7 +164,7 @@ export class SudoWorker {
     this.failAuth?.();
     if (this.pending) {
       clearTimeout(this.pending.timer);
-      this.pending.reject(new BridgeError('locked', 'Administrator access ended; operation outcome may be incomplete.'));
+      this.pending.reject(new BridgeError('locked', '管理员访问已结束；操作结果可能不完整。'));
       this.pending = null;
     }
     // EOF is the primary root-worker revocation signal; it kills its own root process group.

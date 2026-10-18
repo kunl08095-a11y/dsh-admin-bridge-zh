@@ -60,10 +60,18 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zjlww/dsh-admin-bridge.git"
+    "url": "git+https://github.com/kunl08095-a11y/dsh-admin-bridge-zh.git"
   },
-  "homepage": "https://github.com/zjlww/dsh-admin-bridge#readme",
-  "bugs": { "url": "https://github.com/zjlww/dsh-admin-bridge/issues" },
-  "keywords": ["dsh", "deepseek-harness", "plugin", "sudo", "linux"],
+  "homepage": "https://github.com/kunl08095-a11y/dsh-admin-bridge-zh#readme",
+  "bugs": {
+    "url": "https://github.com/kunl08095-a11y/dsh-admin-bridge-zh/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "sudo",
+    "linux"
+  ],
   "license": "MIT"
 }

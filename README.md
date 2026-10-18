@@ -1,3 +1,5 @@
+> **本仓库是 fork**：在 [`zjlww/dsh-admin-bridge`](https://github.com/zjlww/dsh-admin-bridge) 的基础上适配 **DSH 0.2.0-rc.2**，并加入**简体中文界面**和 **Sudo 认证时长选择（30–900 秒）**。上游原版面向 DSH 0.1.2-rc.1；安装本 fork 需要 DSH 供应链的一次性豁免，步骤与差异见 [COMPAT-0.2.0.md](COMPAT-0.2.0.md)。
+
 # DSH Admin Bridge
 
 **Sudo access: a fourth permission mode. Agents can request it; only fresh human password authentication grants temporary root access.**

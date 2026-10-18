@@ -5,8 +5,8 @@ import { BridgeError, exactKeys, identifier } from './policy.js';
 
 const LIMIT = 4096;
 const SANDBOXES = ['read-only', 'workspace-write', 'danger-full-access'];
-const invalid = () => new BridgeError('invalid_journal', 'The permission rollback journal is invalid or unsafe; Sudo access was not granted.');
-const ioFailure = () => new BridgeError('journal_unavailable', 'The permission rollback journal could not be durably updated; Sudo access was not granted.');
+const invalid = () => new BridgeError('invalid_journal', '权限回滚日志无效或不安全；未授予 Sudo 权限。');
+const ioFailure = () => new BridgeError('journal_unavailable', '权限回滚日志无法持久更新；未授予 Sudo 权限。');
 
 function validateSessionId(sessionId) {
   if (!identifier(sessionId)) throw invalid();
