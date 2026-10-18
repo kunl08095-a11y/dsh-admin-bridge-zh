@@ -3,7 +3,8 @@ window.__ModuleLoader__.load({
   id: 'dsh-admin-bridge',
   factory: require => {
     const React = require('react');
-    const { Menu, RiskConfirmation, IconChevronDownOutline14 } = require('@deepseek-ai/dsh-client-ui-primitives');
+    // 0.2.0 renamed the 14px chevron atom: Regular is the default (14px) artwork.
+    const { Menu, RiskConfirmation, IconChevronDownOutlineRegular: IconChevronDownOutline14 } = require('@deepseek-ai/dsh-client-ui-primitives');
     const h = React.createElement;
     const { useEffect, useRef, useState } = React;
     const endpoint = '/admin-bridge/v1/';
@@ -75,7 +76,20 @@ window.__ModuleLoader__.load({
       void post('lock', { sessionId, requestId }, controller.signal).catch(() => {}).finally(() => clearTimeout(timer));
     }
 
-    function PermissionControl({ sessionId, value, locked, command }) {
+    // 0.2 projections expose only `currentValue`; the selector's own menu keeps
+    // the three native modes this plugin's labels and glyphs already describe.
+    const NATIVE_MODE_OPTIONS = [
+      { value: 'read-only', name: 'Read Only' },
+      { value: 'workspace-write', name: 'Workspace Write' },
+      { value: 'danger-full-access', name: 'Full access' },
+    ];
+
+    function PermissionControl({ sessionId, value: ownerValue, locked, command, useProjection }) {
+      // DSH 0.2 session slots deliver the permissions projection through the slot
+      // context rather than an owner `value` prop; accept either form.
+      const projected = typeof useProjection === 'function' ? useProjection('permissions') : undefined;
+      const value = ownerValue ?? (projected === undefined ? undefined
+        : { currentValue: projected.currentValue, options: NATIVE_MODE_OPTIONS });
       const [status, setStatus] = useState(emptyStatus);
       const [menuOpen, setMenuOpen] = useState(false);
       const [dialogOpen, setDialogOpen] = useState(false);
@@ -166,6 +180,9 @@ window.__ModuleLoader__.load({
           setMenuOpen(false); setAcknowledged(false); setConfirmation(null);
         }
       }, [locked, value]);
+
+      // The native selector also renders nothing until the projection is available.
+      if (value === undefined) return null;
 
       async function cancel(requestId) {
         const life = scope.current;
@@ -292,7 +309,7 @@ window.__ModuleLoader__.load({
       const commands = ownStatus.selectedOperations ?? ownStatus.operations ?? [];
       const pending = ownStatus.state === 'pending' && dialogOpen && !!scope.current?.requestId;
       return h(React.Fragment, null,
-        h(Menu, { open: menuOpen, items, selectedId: currentValue, onSelect: choose, onClose: () => setMenuOpen(false), side: 'top',
+        h(Menu, { open: menuOpen, items, selectedId: currentValue, onSelect: choose, onClose: () => setMenuOpen(false), side: 'top', portal: true,
           anchor: h('button', { type: 'button', className: 'Sh0Q9G_trigger',
             'aria-label': 'Access mode: ' + currentLabel, title: current?.description,
             disabled: locked || busy || confirmation !== null, onClick: () => setMenuOpen(!menuOpen) },
@@ -331,10 +348,23 @@ window.__ModuleLoader__.load({
       );
     }
     return {
-      inject: ['slots'],
+      inject: ['slots', 'sessions'],
       apply(ctx) {
+        // 0.2.0 already registers the native selector into this single slot at
+        // priority 0; a negative priority shadows it while leaving it as the
+        // fallback whenever this plugin is absent or unloaded.
+        const commandFor = sessionId => async line => {
+          try {
+            const live = ctx.get('sessions')?.binding(sessionId)?.session;
+            if (!live) return false;
+            const result = await live.command(line);
+            return result?.ok === true && result?.value?.matched === true;
+          } catch { return false; }
+        };
         ctx.slots.inject('conversation.input.permission', () => ctx.slots.register(
-          { name: 'conversation.input.permission', id: 'admin-bridge', order: 50 }, PermissionControl,
+          { name: 'conversation.input.permission', id: 'admin-bridge', order: 50, priority: -1,
+            inject: sessionId => ({ sessionId, command: commandFor(sessionId) }) },
+          PermissionControl,
         ));
       },
     };
